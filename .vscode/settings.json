@@ -1,0 +1,6 @@
+{
+    "files.associations": {
+        "xwiimote.h": "c",
+        "xorg-server.h": "c"
+    }
+}
