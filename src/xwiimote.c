@@ -46,6 +46,7 @@
 #include <xwiimote.h>
 
 #define MIN_KEYCODE 8
+#define ONE_SEC_IN_USECS 1000000
 
 #define XWIIMOTE_ACCEL_HISTORY_NUM 12
 #define XWIIMOTE_ACCEL_HISTORY_MOD 2
@@ -145,11 +146,37 @@ struct xwiimote_dev {
 	int ir_avg_max_samples;
 	int ir_avg_min_samples;
 	int ir_avg_weight;
-	int ir_keymap_expiry_secs;
+	struct timeval ir_keymap_expiry_time;
 
 	struct xwii_event_abs accel_history_ev[XWIIMOTE_ACCEL_HISTORY_NUM];
 	int accel_history_cur;
 };
+
+/* returns -1 if a is smaller than b, 1 if a is larger than b and 0 if they are equal */
+static int8_t compare_timeval(struct timeval a, struct timeval b)
+{
+	if (a.tv_sec < b.tv_sec) return -1;
+	if (a.tv_sec > b.tv_sec) return 1;
+	if (a.tv_usec < b.tv_usec) return -1;
+	if (a.tv_usec > b.tv_usec) return 1;
+	return 0;
+}
+
+/* adds two timevals together */
+static struct timeval add_timeval(struct timeval a, struct timeval b)
+{
+	struct timeval result = {
+		.tv_sec = a.tv_sec + b.tv_sec,
+		.tv_usec = a.tv_usec + b.tv_usec,
+	};
+
+	if (a.tv_usec + b.tv_usec >= ONE_SEC_IN_USECS) {
+		result.tv_sec++;
+		result.tv_usec -= ONE_SEC_IN_USECS;
+	}
+
+	return result;
+}
 
 /* List of all devices we know about to avoid duplicates */
 static struct xwiimote_dev *xwiimote_devices[MAXDEVICES + 1];
@@ -391,9 +418,7 @@ static void xwiimote_key(struct xwiimote_dev *dev, struct xwii_event *ev)
 		absolute = 1;
 
 	if (ev->v.key.state) {
-		if (ev->time.tv_sec < dev->ir_last_valid_event.tv_sec + dev->ir_keymap_expiry_secs
-				|| (ev->time.tv_sec == dev->ir_last_valid_event.tv_sec + dev->ir_keymap_expiry_secs
-					&& ev->time.tv_usec < dev->ir_last_valid_event.tv_usec)) {
+		if (compare_timeval(ev->time, add_timeval(dev->ir_last_valid_event, dev->ir_keymap_expiry_time)) == -1) {
 			keyset = KEYSET_IR;
 		}
 		dev->key_pressed[code] = keyset;
@@ -1410,6 +1435,7 @@ static void xwiimote_configure_mp(struct xwiimote_dev *dev)
 static void xwiimote_configure_ir(struct xwiimote_dev *dev)
 {
 	const char *t;
+	int scale;
 
 	t = xf86FindOptionValue(dev->info->options, "IRAvgRadius");
 	parse_scale(dev, t, &dev->ir_avg_radius);
@@ -1431,7 +1457,7 @@ static void xwiimote_configure_ir(struct xwiimote_dev *dev)
 	if (dev->ir_avg_weight < 0) dev->ir_avg_weight = 0;
 
 	t = xf86FindOptionValue(dev->info->options, "IRKeymapExpirySecs");
-	parse_scale(dev, t, &dev->ir_keymap_expiry_secs);
+	if (parse_scale(dev, t, &scale)) dev->ir_keymap_expiry_time.tv_sec = scale;
 }
 
 static void xwiimote_configure(struct xwiimote_dev *dev)
@@ -1557,7 +1583,8 @@ static int xwiimote_preinit(InputDriverPtr drv, InputInfoPtr info, int flags)
 	dev->ir_avg_max_samples = XWIIMOTE_IR_AVG_MAX_SAMPLES;
 	dev->ir_avg_min_samples = XWIIMOTE_IR_AVG_MIN_SAMPLES;
 	dev->ir_avg_weight = XWIIMOTE_IR_AVG_WEIGHT;
-	dev->ir_keymap_expiry_secs = XWIIMOTE_IR_KEYMAP_EXPIRY_SECS;
+	dev->ir_keymap_expiry_time.tv_sec = XWIIMOTE_IR_KEYMAP_EXPIRY_SECS;
+	dev->ir_keymap_expiry_time.tv_usec = 0;
 
 	dev->device = xf86FindOptionValue(info->options, "Device");
 	if (!dev->device) {
