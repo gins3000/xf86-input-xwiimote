@@ -57,6 +57,7 @@
 #define XWIIMOTE_IR_AVG_WEIGHT 3
 
 #define XWIIMOTE_IR_KEYMAP_EXPIRY_SECS 1
+#define XWIIMOTE_IR_CLICK_EXPIRY_MSECS 200
 
 #define XWIIMOTE_DISTSQ(ax, ay, bx, by) \
 	((ax - bx) * (ax - bx) + (ay - by) * (ay - by))
@@ -134,6 +135,7 @@ struct xwiimote_dev {
 	int mp_z_scale;
 
 	struct timeval ir_last_valid_event;
+	struct timeval ir_last_click_event;
 	int ir_vec_x;
 	int ir_vec_y;
 	int ir_ref_x;
@@ -147,6 +149,7 @@ struct xwiimote_dev {
 	int ir_avg_min_samples;
 	int ir_avg_weight;
 	struct timeval ir_keymap_expiry_time;
+	struct timeval ir_click_expiry_time;
 
 	struct xwii_event_abs accel_history_ev[XWIIMOTE_ACCEL_HISTORY_NUM];
 	int accel_history_cur;
@@ -431,6 +434,7 @@ static void xwiimote_key(struct xwiimote_dev *dev, struct xwii_event *ev)
 			btn = dev->map_key[keyset][code].u.btn;
 			xf86PostButtonEvent(dev->info->dev, absolute, btn,
 								state, 0, 0);
+			dev->ir_last_click_event = ev->time;
 			break;
 		case FUNC_KEY:
 			key = dev->map_key[keyset][code].u.key + MIN_KEYCODE;
@@ -565,8 +569,12 @@ static void xwiimote_ir(struct xwiimote_dev *dev, struct xwii_event *ev)
 		dev->ir_avg_count = 0;
 	}
 
-	xf86PostMotionEvent(dev->info->dev, absolute, 0, 2,
-				1023 - a->x, a->y);
+	// do not post motion events, if a click has happened within a certain tiny timeframe
+	// this prevents clicks from causing accidental drag actions from shaky IR readings
+	if (compare_timeval(ev->time, add_timeval(dev->ir_last_click_event, dev->ir_click_expiry_time)) == 1) {
+		xf86PostMotionEvent(dev->info->dev, absolute, 0, 2,
+					1023 - a->x, a->y);
+	}
 
 	dev->ir_last_valid_event = ev->time;
 }
@@ -1374,12 +1382,14 @@ static void parse_axis(struct xwiimote_dev *dev, const char *t,
 		*out = 2;
 }
 
-static void parse_scale(struct xwiimote_dev *dev, const char *t, int *out)
+/* returns false if t is empty, otherwise writes the int interpretation to out and returns true */
+static bool parse_scale(struct xwiimote_dev *dev, const char *t, int *out)
 {
 	if (!t)
-		return;
+		return false;
 
 	*out = atoi(t);
+	return true;
 }
 
 static void xwiimote_configure_mp(struct xwiimote_dev *dev)
@@ -1458,6 +1468,9 @@ static void xwiimote_configure_ir(struct xwiimote_dev *dev)
 
 	t = xf86FindOptionValue(dev->info->options, "IRKeymapExpirySecs");
 	if (parse_scale(dev, t, &scale)) dev->ir_keymap_expiry_time.tv_sec = scale;
+
+	t = xf86FindOptionValue(dev->info->options, "IRClickExpiryMSecs");
+	if (parse_scale(dev, t, &scale)) dev->ir_click_expiry_time.tv_usec = scale * 1000;
 }
 
 static void xwiimote_configure(struct xwiimote_dev *dev)
@@ -1585,6 +1598,8 @@ static int xwiimote_preinit(InputDriverPtr drv, InputInfoPtr info, int flags)
 	dev->ir_avg_weight = XWIIMOTE_IR_AVG_WEIGHT;
 	dev->ir_keymap_expiry_time.tv_sec = XWIIMOTE_IR_KEYMAP_EXPIRY_SECS;
 	dev->ir_keymap_expiry_time.tv_usec = 0;
+	dev->ir_click_expiry_time.tv_sec = 0;
+	dev->ir_click_expiry_time.tv_usec = XWIIMOTE_IR_CLICK_EXPIRY_MSECS * 1000;
 
 	dev->device = xf86FindOptionValue(info->options, "Device");
 	if (!dev->device) {
