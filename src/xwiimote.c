@@ -1473,9 +1473,20 @@ static void xwiimote_configure_ir(struct xwiimote_dev *dev)
 	if (parse_scale(dev, t, &scale)) dev->ir_click_expiry_time.tv_usec = scale * 1000;
 }
 
+static void xwiimote_set_key_from_option(
+			struct xwiimote_dev *dev,
+			const char *option_name,
+			enum keyset keyset,
+			enum xwii_event_keys key_num)
+{
+	const char *key;
+    key = xf86FindOptionValue(dev->info->options, option_name);
+	parse_key(dev, key, &dev->map_key[keyset][key_num]);
+}
+
 static void xwiimote_configure(struct xwiimote_dev *dev)
 {
-	const char *motion, *key;
+	const char *motion;
 
 	memcpy(dev->map_key[KEYSET_NORMAL], map_key_default, sizeof(map_key_default));
 	memcpy(dev->map_key[KEYSET_IR], map_key_default, sizeof(map_key_default));
@@ -1498,71 +1509,31 @@ static void xwiimote_configure(struct xwiimote_dev *dev)
 		dev->ifs |= XWII_IFACE_MOTION_PLUS;
 	}
 
-	key = xf86FindOptionValue(dev->info->options, "MapLeft");
-	parse_key(dev, key, &dev->map_key[KEYSET_NORMAL][XWII_KEY_LEFT]);
+	// Standard controls
+	xwiimote_set_key_from_option(dev, "MapLeft", KEYSET_NORMAL, XWII_KEY_LEFT);
+	xwiimote_set_key_from_option(dev, "MapRight", KEYSET_NORMAL, XWII_KEY_RIGHT);
+	xwiimote_set_key_from_option(dev, "MapUp", KEYSET_NORMAL, XWII_KEY_UP);
+	xwiimote_set_key_from_option(dev, "MapDown", KEYSET_NORMAL, XWII_KEY_DOWN);
+	xwiimote_set_key_from_option(dev, "MapA", KEYSET_NORMAL, XWII_KEY_A);
+	xwiimote_set_key_from_option(dev, "MapB", KEYSET_NORMAL, XWII_KEY_B);
+	xwiimote_set_key_from_option(dev, "MapPlus", KEYSET_NORMAL, XWII_KEY_PLUS);
+	xwiimote_set_key_from_option(dev, "MapMinus", KEYSET_NORMAL, XWII_KEY_MINUS);
+	xwiimote_set_key_from_option(dev, "MapHome", KEYSET_NORMAL, XWII_KEY_HOME);
+	xwiimote_set_key_from_option(dev, "MapOne", KEYSET_NORMAL, XWII_KEY_ONE);
+	xwiimote_set_key_from_option(dev, "MapTwo", KEYSET_NORMAL, XWII_KEY_TWO);
 
-	key = xf86FindOptionValue(dev->info->options, "MapRight");
-	parse_key(dev, key, &dev->map_key[KEYSET_NORMAL][XWII_KEY_RIGHT]);
-
-	key = xf86FindOptionValue(dev->info->options, "MapUp");
-	parse_key(dev, key, &dev->map_key[KEYSET_NORMAL][XWII_KEY_UP]);
-
-	key = xf86FindOptionValue(dev->info->options, "MapDown");
-	parse_key(dev, key, &dev->map_key[KEYSET_NORMAL][XWII_KEY_DOWN]);
-
-	key = xf86FindOptionValue(dev->info->options, "MapA");
-	parse_key(dev, key, &dev->map_key[KEYSET_NORMAL][XWII_KEY_A]);
-
-	key = xf86FindOptionValue(dev->info->options, "MapB");
-	parse_key(dev, key, &dev->map_key[KEYSET_NORMAL][XWII_KEY_B]);
-
-	key = xf86FindOptionValue(dev->info->options, "MapPlus");
-	parse_key(dev, key, &dev->map_key[KEYSET_NORMAL][XWII_KEY_PLUS]);
-
-	key = xf86FindOptionValue(dev->info->options, "MapMinus");
-	parse_key(dev, key, &dev->map_key[KEYSET_NORMAL][XWII_KEY_MINUS]);
-
-	key = xf86FindOptionValue(dev->info->options, "MapHome");
-	parse_key(dev, key, &dev->map_key[KEYSET_NORMAL][XWII_KEY_HOME]);
-
-	key = xf86FindOptionValue(dev->info->options, "MapOne");
-	parse_key(dev, key, &dev->map_key[KEYSET_NORMAL][XWII_KEY_ONE]);
-
-	key = xf86FindOptionValue(dev->info->options, "MapTwo");
-	parse_key(dev, key, &dev->map_key[KEYSET_NORMAL][XWII_KEY_TWO]);
-
-	key = xf86FindOptionValue(dev->info->options, "MapIRLeft");
-	parse_key(dev, key, &dev->map_key[KEYSET_IR][XWII_KEY_LEFT]);
-
-	key = xf86FindOptionValue(dev->info->options, "MapIRRight");
-	parse_key(dev, key, &dev->map_key[KEYSET_IR][XWII_KEY_RIGHT]);
-
-	key = xf86FindOptionValue(dev->info->options, "MapIRUp");
-	parse_key(dev, key, &dev->map_key[KEYSET_IR][XWII_KEY_UP]);
-
-	key = xf86FindOptionValue(dev->info->options, "MapIRDown");
-	parse_key(dev, key, &dev->map_key[KEYSET_IR][XWII_KEY_DOWN]);
-
-	key = xf86FindOptionValue(dev->info->options, "MapIRA");
-	parse_key(dev, key, &dev->map_key[KEYSET_IR][XWII_KEY_A]);
-
-	key = xf86FindOptionValue(dev->info->options, "MapIRB");
-	parse_key(dev, key, &dev->map_key[KEYSET_IR][XWII_KEY_B]);
-
-	key = xf86FindOptionValue(dev->info->options, "MapIRPlus");
-	parse_key(dev, key, &dev->map_key[KEYSET_IR][XWII_KEY_PLUS]);
-
-	key = xf86FindOptionValue(dev->info->options, "MapIRMinus");
-	parse_key(dev, key, &dev->map_key[KEYSET_IR][XWII_KEY_MINUS]);
-
-	key = xf86FindOptionValue(dev->info->options, "MapIRHome");
-	parse_key(dev, key, &dev->map_key[KEYSET_IR][XWII_KEY_HOME]);
-
-	key = xf86FindOptionValue(dev->info->options, "MapIROne");
-	parse_key(dev, key, &dev->map_key[KEYSET_IR][XWII_KEY_ONE]);
-
-	key = xf86FindOptionValue(dev->info->options, "MapIRTwo");
-	parse_key(dev, key, &dev->map_key[KEYSET_IR][XWII_KEY_TWO]);
+	// IR mapping
+	xwiimote_set_key_from_option(dev, "MapIRLeft", KEYSET_IR, XWII_KEY_LEFT);
+	xwiimote_set_key_from_option(dev, "MapIRRight", KEYSET_IR, XWII_KEY_RIGHT);
+	xwiimote_set_key_from_option(dev, "MapIRUp", KEYSET_IR, XWII_KEY_UP);
+	xwiimote_set_key_from_option(dev, "MapIRDown", KEYSET_IR, XWII_KEY_DOWN);
+	xwiimote_set_key_from_option(dev, "MapIRA", KEYSET_IR, XWII_KEY_A);
+	xwiimote_set_key_from_option(dev, "MapIRB", KEYSET_IR, XWII_KEY_B);
+	xwiimote_set_key_from_option(dev, "MapIRPlus", KEYSET_IR, XWII_KEY_PLUS);
+	xwiimote_set_key_from_option(dev, "MapIRMinus", KEYSET_IR, XWII_KEY_MINUS);
+	xwiimote_set_key_from_option(dev, "MapIRHome", KEYSET_IR, XWII_KEY_HOME);
+	xwiimote_set_key_from_option(dev, "MapIROne", KEYSET_IR, XWII_KEY_ONE);
+	xwiimote_set_key_from_option(dev, "MapIRTwo", KEYSET_IR, XWII_KEY_TWO);
 
 	xwiimote_configure_mp(dev);
 	xwiimote_configure_ir(dev);
