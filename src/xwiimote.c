@@ -68,6 +68,7 @@ enum func_type {
 	FUNC_IGNORE,
 	FUNC_BTN,
 	FUNC_KEY,
+	FUNC_INTERNAL,
 };
 
 struct func {
@@ -108,8 +109,16 @@ enum motion_source {
 enum keyset {
 	KEYSET_NORMAL,
 	KEYSET_IR,
+	KEYSET_ALT,
+	KEYSET_IR_ALT,
 
+	// Number of keysets
 	KEYSET_NUM
+};
+
+enum internal_keys {
+	INTERNAL_KEYS_ALT_HOLD = 1,
+	INTERNAL_KEYS_ALT_TOGGLE,
 };
 
 struct xwiimote_dev {
@@ -133,6 +142,7 @@ struct xwiimote_dev {
 	int mp_x_scale;
 	int mp_y_scale;
 	int mp_z_scale;
+	bool alt_keyset_active;
 
 	struct timeval ir_last_valid_event;
 	struct timeval ir_last_click_event;
@@ -422,7 +432,9 @@ static void xwiimote_key(struct xwiimote_dev *dev, struct xwii_event *ev)
 
 	if (ev->v.key.state) {
 		if (compare_timeval(ev->time, add_timeval(dev->ir_last_valid_event, dev->ir_keymap_expiry_time)) == -1) {
-			keyset = KEYSET_IR;
+			keyset = dev->alt_keyset_active ? KEYSET_IR_ALT : KEYSET_IR;
+		} else if (dev->alt_keyset_active) {
+			keyset = KEYSET_ALT;
 		}
 		dev->key_pressed[code] = keyset;
 	} else {
@@ -430,6 +442,14 @@ static void xwiimote_key(struct xwiimote_dev *dev, struct xwii_event *ev)
 	}
 
 	switch (dev->map_key[keyset][code].type) {
+		case FUNC_INTERNAL:
+			key = dev->map_key[keyset][code].u.key;
+			if (key == INTERNAL_KEYS_ALT_HOLD) {
+				dev->alt_keyset_active = state ? 1 : 0;
+			} else if (key == INTERNAL_KEYS_ALT_TOGGLE && state) {
+				dev->alt_keyset_active = !dev->alt_keyset_active;
+			}
+			break;
 		case FUNC_BTN:
 			btn = dev->map_key[keyset][code].u.btn;
 			xf86PostButtonEvent(dev->info->dev, absolute, btn,
@@ -1345,6 +1365,12 @@ static struct key_value_pair button2value[] = {
 	{ NULL, 0 },
 };
 
+static struct key_value_pair internal2value[] = {
+	{ "alt-hold", INTERNAL_KEYS_ALT_HOLD },
+	{ "alt-toggle", INTERNAL_KEYS_ALT_TOGGLE },
+	{ NULL, 0 },
+};
+
 static void parse_key(struct xwiimote_dev *dev, const char *key, struct func *out)
 {
 	unsigned int i;
@@ -1356,6 +1382,15 @@ static void parse_key(struct xwiimote_dev *dev, const char *key, struct func *ou
 	for (i = 0; ignoreValues[i]; ++i) {
 		if (!strcasecmp(ignoreValues[i], key)) {
 			out->type = FUNC_IGNORE;
+			return;
+		}
+	}
+
+	// "Internal" values
+	for (i = 0; internal2value[i].key; ++i) {
+		if (!strcasecmp(internal2value[i].key, key)) {
+			out->type = FUNC_INTERNAL;
+			out->u.key = internal2value[i].value;
 			return;
 		}
 	}
@@ -1504,9 +1539,6 @@ static void xwiimote_configure(struct xwiimote_dev *dev)
 {
 	const char *motion;
 
-	memcpy(dev->map_key[KEYSET_NORMAL], map_key_default, sizeof(map_key_default));
-	memcpy(dev->map_key[KEYSET_IR], map_key_default, sizeof(map_key_default));
-
 	motion = xf86FindOptionValue(dev->info->options, "MotionSource");
 	if (!motion)
 		motion = "";
@@ -1526,6 +1558,7 @@ static void xwiimote_configure(struct xwiimote_dev *dev)
 	}
 
 	// Standard controls
+	memcpy(dev->map_key[KEYSET_NORMAL], map_key_default, sizeof(map_key_default));
 	xwiimote_set_key_from_option(dev, "MapLeft", KEYSET_NORMAL, XWII_KEY_LEFT);
 	xwiimote_set_key_from_option(dev, "MapRight", KEYSET_NORMAL, XWII_KEY_RIGHT);
 	xwiimote_set_key_from_option(dev, "MapUp", KEYSET_NORMAL, XWII_KEY_UP);
@@ -1538,7 +1571,22 @@ static void xwiimote_configure(struct xwiimote_dev *dev)
 	xwiimote_set_key_from_option(dev, "MapOne", KEYSET_NORMAL, XWII_KEY_ONE);
 	xwiimote_set_key_from_option(dev, "MapTwo", KEYSET_NORMAL, XWII_KEY_TWO);
 
+	// Standard B mapping
+	memcpy(dev->map_key[KEYSET_ALT], dev->map_key[KEYSET_NORMAL], sizeof(dev->map_key[KEYSET_NORMAL]));
+	xwiimote_set_key_from_option(dev, "MapAltLeft", KEYSET_ALT, XWII_KEY_LEFT);
+	xwiimote_set_key_from_option(dev, "MapAltRight", KEYSET_ALT, XWII_KEY_RIGHT);
+	xwiimote_set_key_from_option(dev, "MapAltUp", KEYSET_ALT, XWII_KEY_UP);
+	xwiimote_set_key_from_option(dev, "MapAltDown", KEYSET_ALT, XWII_KEY_DOWN);
+	xwiimote_set_key_from_option(dev, "MapAltA", KEYSET_ALT, XWII_KEY_A);
+	xwiimote_set_key_from_option(dev, "MapAltB", KEYSET_ALT, XWII_KEY_B);
+	xwiimote_set_key_from_option(dev, "MapAltPlus", KEYSET_ALT, XWII_KEY_PLUS);
+	xwiimote_set_key_from_option(dev, "MapAltMinus", KEYSET_ALT, XWII_KEY_MINUS);
+	xwiimote_set_key_from_option(dev, "MapAltHome", KEYSET_ALT, XWII_KEY_HOME);
+	xwiimote_set_key_from_option(dev, "MapAltOne", KEYSET_ALT, XWII_KEY_ONE);
+	xwiimote_set_key_from_option(dev, "MapAltTwo", KEYSET_ALT, XWII_KEY_TWO);
+
 	// IR mapping
+	memcpy(dev->map_key[KEYSET_IR], dev->map_key[KEYSET_NORMAL], sizeof(dev->map_key[KEYSET_NORMAL]));
 	xwiimote_set_key_from_option(dev, "MapIRLeft", KEYSET_IR, XWII_KEY_LEFT);
 	xwiimote_set_key_from_option(dev, "MapIRRight", KEYSET_IR, XWII_KEY_RIGHT);
 	xwiimote_set_key_from_option(dev, "MapIRUp", KEYSET_IR, XWII_KEY_UP);
@@ -1550,6 +1598,20 @@ static void xwiimote_configure(struct xwiimote_dev *dev)
 	xwiimote_set_key_from_option(dev, "MapIRHome", KEYSET_IR, XWII_KEY_HOME);
 	xwiimote_set_key_from_option(dev, "MapIROne", KEYSET_IR, XWII_KEY_ONE);
 	xwiimote_set_key_from_option(dev, "MapIRTwo", KEYSET_IR, XWII_KEY_TWO);
+
+	// IR B mapping
+	memcpy(dev->map_key[KEYSET_IR_ALT], dev->map_key[KEYSET_IR], sizeof(dev->map_key[KEYSET_IR]));
+	xwiimote_set_key_from_option(dev, "MapIRAltLeft", KEYSET_IR_ALT, XWII_KEY_LEFT);
+	xwiimote_set_key_from_option(dev, "MapIRAltRight", KEYSET_IR_ALT, XWII_KEY_RIGHT);
+	xwiimote_set_key_from_option(dev, "MapIRAltUp", KEYSET_IR_ALT, XWII_KEY_UP);
+	xwiimote_set_key_from_option(dev, "MapIRAltDown", KEYSET_IR_ALT, XWII_KEY_DOWN);
+	xwiimote_set_key_from_option(dev, "MapIRAltA", KEYSET_IR_ALT, XWII_KEY_A);
+	xwiimote_set_key_from_option(dev, "MapIRAltB", KEYSET_IR_ALT, XWII_KEY_B);
+	xwiimote_set_key_from_option(dev, "MapIRAltPlus", KEYSET_IR_ALT, XWII_KEY_PLUS);
+	xwiimote_set_key_from_option(dev, "MapIRAltMinus", KEYSET_IR_ALT, XWII_KEY_MINUS);
+	xwiimote_set_key_from_option(dev, "MapIRAltHome", KEYSET_IR_ALT, XWII_KEY_HOME);
+	xwiimote_set_key_from_option(dev, "MapIRAltOne", KEYSET_IR_ALT, XWII_KEY_ONE);
+	xwiimote_set_key_from_option(dev, "MapIRAltTwo", KEYSET_IR_ALT, XWII_KEY_TWO);
 
 	xwiimote_configure_mp(dev);
 	xwiimote_configure_ir(dev);
@@ -1573,6 +1635,7 @@ static int xwiimote_preinit(InputDriverPtr drv, InputInfoPtr info, int flags)
 	info->read_input = NULL;
 	info->switch_mode = NULL;
 	info->fd = -1;
+	dev->alt_keyset_active = false;
 	dev->mp_x = 0;
 	dev->mp_y = 1;
 	dev->mp_z = 2;
