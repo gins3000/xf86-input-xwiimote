@@ -1330,42 +1330,58 @@ static struct key_value_pair {
 	{ NULL, 0 },
 };
 
+static const char *ignoreValues[] = {
+	"none",
+	"off",
+	"0",
+	"false",
+	NULL,
+};
+
+static struct key_value_pair button2value[] = {
+	{ "left-button", 1 },
+	{ "right-button", 3 },
+	{ "middle-button", 2 },
+	{ NULL, 0 },
+};
+
 static void parse_key(struct xwiimote_dev *dev, const char *key, struct func *out)
 {
 	unsigned int i;
 
 	if (!key)
 		return;
-
-	if (!strcasecmp(key, "none") ||
-			!strcasecmp(key, "off") ||
-			!strcasecmp(key, "0") ||
-			!strcasecmp(key, "false")) {
-		out->type = FUNC_IGNORE;
-	} else if (!strcasecmp(key, "left-button")) {
-		out->type = FUNC_BTN;
-		out->u.btn = 1;
-	} else if (!strcasecmp(key, "right-button")) {
-		out->type = FUNC_BTN;
-		out->u.btn = 3;
-	} else if (!strcasecmp(key, "middle-button")) {
-		out->type = FUNC_BTN;
-		out->u.btn = 2;
-	} else {
-		for (i = 0; key2value[i].key; ++i) {
-			if (!strcasecmp(key2value[i].key, key))
-				break;
-		}
-
-		if (key2value[i].key) {
-			out->type = FUNC_KEY;
-			out->u.key = key2value[i].value;
-		} else {
-			xf86IDrvMsg(dev->info, X_ERROR,
-						"Invalid key option %s\n", key);
+	
+	// "Ignore" values
+	for (i = 0; ignoreValues[i]; ++i) {
+		if (!strcasecmp(ignoreValues[i], key)) {
 			out->type = FUNC_IGNORE;
+			return;
 		}
 	}
+
+	// "Mouse button" values
+	for (i = 0; button2value[i].key; ++i) {
+		if (!strcasecmp(button2value[i].key, key)) {
+			out->type = FUNC_BTN;
+			out->u.btn = button2value[i].value;
+			return;
+		}
+	}
+
+	// "Keyboard" values
+	for (i = 0; key2value[i].key; ++i) {
+		if (!strcasecmp(key2value[i].key, key)) {
+			out->type = FUNC_KEY;
+			out->u.key = key2value[i].value;
+			return;
+		}
+	}
+
+	// Error and fallback
+	xf86IDrvMsg(dev->info, X_ERROR,
+				"Invalid key option %s\n", key);
+	out->type = FUNC_IGNORE;
 }
 
 static void parse_axis(struct xwiimote_dev *dev, const char *t,
